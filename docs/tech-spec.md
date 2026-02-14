@@ -33,7 +33,7 @@ lib/
       domain/                # 타이머 로직(남은 시간 계산, 상태 전이)
       presentation/
         screens/              # 설정·실행·완료 화면
-        widgets/              # 모래시계, 슬라이더 등
+        widgets/              # 모래시계, 휠 피커 등
   shared/                     # 여러 feature에서 쓰는 위젯·유틸
     widgets/
     utils/
@@ -53,7 +53,13 @@ lib/
   - `durationSeconds`: 설정된 총 시간(초)
   - `remainingSeconds`: 남은 시간(초)
   - `finishedAt`: 종료 알림을 울릴 시점(DateTime, 백그라운드 알람용)
-- **UI는 이 상태를 구독**하고, 버튼·슬라이더는 상태 변경 메서드만 호출.
+- **UI는 이 상태를 구독**하고, 버튼·휠 피커는 상태 변경 메서드만 호출.
+
+---
+
+## 3.1 시간 설정 UI
+
+- **휠 피커 구현**: `wheel_picker` 패키지 사용.
   - <!-- TODO: 재시작 시 직전 설정 시간 사용(spec §3.2). finished 상태에서 durationSeconds 유지 여부 구현 시 결정 후 이 문서 반영. -->
 
 ---
