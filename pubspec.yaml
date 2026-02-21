@@ -58,6 +58,26 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  fonts:
+    - family: NotoSans
+      fonts:
+        - asset: assets/fonts/NotoSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSans-SemiBold.ttf
+          weight: 600
+    - family: NotoSansKR
+      fonts:
+        - asset: assets/fonts/NotoSansKR-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansKR-SemiBold.ttf
+          weight: 600
+    - family: NotoSansJP
+      fonts:
+        - asset: assets/fonts/NotoSansJP-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansJP-SemiBold.ttf
+          weight: 600
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

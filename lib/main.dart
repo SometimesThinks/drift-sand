@@ -16,8 +16,23 @@ class DriftSandApp extends StatelessWidget {
     return MaterialApp(
       title: 'Drift Sand',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.brown),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8FBFA6)),
         useMaterial3: true,
+        fontFamily: 'NotoSans',
+        fontFamilyFallback: const ['NotoSansKR', 'NotoSansJP'],
+        textTheme: ThemeData.light().textTheme.copyWith(
+          titleLarge: const TextStyle(fontWeight: FontWeight.w600),
+          titleMedium: const TextStyle(fontWeight: FontWeight.w600),
+          titleSmall: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        appBarTheme: const AppBarTheme(
+          titleTextStyle: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF5B4634),
+          ),
+          iconTheme: IconThemeData(color: Color(0xFF5B4634)),
+        ),
       ),
       home: const TimerHomePage(),
     );
@@ -25,6 +40,19 @@ class DriftSandApp extends StatelessWidget {
 }
 
 enum TimerStatus { idle, running, paused, finished }
+
+class _GlassPalette {
+  static const Color seed = Color(0xFF8FBFA6);
+  static const List<Color> backgroundGradient = [
+    Color(0xFFF6ECD9),
+    Color(0xFFEAD9BF),
+    Color(0xFFF4E7CF),
+  ];
+  static const Color panelBase = Color(0xFFEAF6EF);
+  static const Color panelBorder = Color(0xFFCFE6D6);
+  static const Color buttonText = Color(0xFF5B4634);
+  static const Color buttonDisabledText = Color(0x995B4634);
+}
 
 class TimerHomePage extends StatefulWidget {
   const TimerHomePage({super.key});
@@ -129,7 +157,14 @@ class _TimerHomePageState extends State<TimerHomePage>
     _ticker?.cancel();
     _ticker = null;
     _status = TimerStatus.idle;
-    _remaining = _selectedDuration();
+    _selectedHours = 0;
+    _selectedMinutes = 0;
+    _selectedSeconds = 0;
+    _remaining = Duration.zero;
+    _activeDuration = Duration.zero;
+    _hoursController.setCurrent(0);
+    _minutesController.setCurrent(0);
+    _secondsController.setCurrent(0);
     _endTime = null;
     _lastRenderedSeconds = -1;
     _repaintController?.stop();
@@ -310,32 +345,38 @@ class _TimerHomePageState extends State<TimerHomePage>
   Widget build(BuildContext context) {
     final remainingLabel = _formatDuration(_remaining);
     final primaryLabel = _isRunning
-        ? 'Pause'
+        ? 'pause'
         : _isPaused
-        ? 'Resume'
+        ? 'resume'
         : _isFinished
-        ? 'Restart'
-        : 'Start';
+        ? 'restart'
+        : 'start';
     final primaryAction = _isRunning ? _pause : _start;
     const isLiquidGlass = true;
     // 전체 화면 레이아웃 구조
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Drift Sand'),
-        backgroundColor: isLiquidGlass
-            ? Colors.transparent
-            : Colors.brown.shade100,
-        surfaceTintColor: isLiquidGlass
-            ? Colors.transparent
-            : Colors.brown.shade100,
-        elevation: isLiquidGlass ? 0 : null,
-        flexibleSpace: isLiquidGlass
-            ? _GlassPanel(
-                borderRadius: BorderRadius.zero,
-                padding: const EdgeInsets.only(top: 0),
-                child: const SizedBox.expand(),
-              )
-            : null,
+      appBar: _HeaderBottomEdge(
+        child: AppBar(
+          title: const Text('Drift Sand'),
+          backgroundColor: isLiquidGlass
+              ? Colors.transparent
+              : Colors.brown.shade100,
+          surfaceTintColor: isLiquidGlass
+              ? Colors.transparent
+              : Colors.brown.shade100,
+          elevation: isLiquidGlass ? 0 : null,
+          flexibleSpace: isLiquidGlass
+              ? Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _GlassPalette.backgroundGradient,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                )
+              : null,
+        ),
       ),
       extendBodyBehindAppBar: false,
       bottomNavigationBar: SafeArea(
@@ -371,11 +412,7 @@ class _TimerHomePageState extends State<TimerHomePage>
         decoration: BoxDecoration(
           gradient: isLiquidGlass
               ? const LinearGradient(
-                  colors: [
-                    Color(0xFFF5F7FF),
-                    Color(0xFFDDE9FF),
-                    Color(0xFFF7E4D6),
-                  ],
+                  colors: _GlassPalette.backgroundGradient,
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 )
@@ -424,13 +461,22 @@ class _TimerHomePageState extends State<TimerHomePage>
                                         _repaintController ??
                                         const AlwaysStoppedAnimation(0),
                                     builder: (context, _) {
+                                      final selected = _selectedDuration();
+                                      final idleEmpty =
+                                          _status == TimerStatus.idle &&
+                                          selected.inMilliseconds == 0;
+                                      final forceIdleFull = idleEmpty;
                                       final displayDuration =
                                           _status == TimerStatus.idle
-                                          ? _selectedDuration()
+                                          ? (idleEmpty
+                                                ? const Duration(seconds: 1)
+                                                : selected)
                                           : _activeDuration;
                                       final displayRemaining =
                                           _status == TimerStatus.idle
-                                          ? _selectedDuration()
+                                          ? (idleEmpty
+                                                ? const Duration(seconds: 1)
+                                                : selected)
                                           : _remaining;
                                       final displayEndTime =
                                           _status == TimerStatus.running
@@ -442,6 +488,7 @@ class _TimerHomePageState extends State<TimerHomePage>
                                           activeDuration: displayDuration,
                                           remaining: displayRemaining,
                                           endTime: displayEndTime,
+                                          forceIdleFull: forceIdleFull,
                                         ),
                                       );
                                     },
@@ -455,55 +502,58 @@ class _TimerHomePageState extends State<TimerHomePage>
                             opacity: _status == TimerStatus.idle ? 1 : 0.6,
                             child: IgnorePointer(
                               ignoring: _status != TimerStatus.idle,
-                              child: _GlassWrapper(
-                                enabled: isLiquidGlass,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        _buildWheel(
-                                          label: '',
-                                          controller: _hoursController,
-                                          onChanged: _setHours,
-                                          wheelHeight: wheelHeight,
-                                          itemExtent: itemExtent,
-                                          fontSize: fontSize,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        _buildWheel(
-                                          label: '',
-                                          controller: _minutesController,
-                                          onChanged: _setMinutes,
-                                          wheelHeight: wheelHeight,
-                                          itemExtent: itemExtent,
-                                          fontSize: fontSize,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        _buildWheel(
-                                          label: '',
-                                          controller: _secondsController,
-                                          onChanged: _setSeconds,
-                                          wheelHeight: wheelHeight,
-                                          itemExtent: itemExtent,
-                                          fontSize: fontSize,
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    if (_showBoundaryWarning)
-                                      const Padding(
-                                        padding: EdgeInsets.only(top: 6),
-                                        child: Text(
-                                          '24:00:00 초과 불가 — 23시간대로 조정됨',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: Colors.red,
-                                            fontSize: 12,
+                              child: CustomPaint(
+                                painter: _WheelBoxOutlinePainter(),
+                                child: _GlassWrapper(
+                                  enabled: isLiquidGlass,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          _buildWheel(
+                                            label: '',
+                                            controller: _hoursController,
+                                            onChanged: _setHours,
+                                            wheelHeight: wheelHeight,
+                                            itemExtent: itemExtent,
+                                            fontSize: fontSize,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          _buildWheel(
+                                            label: '',
+                                            controller: _minutesController,
+                                            onChanged: _setMinutes,
+                                            wheelHeight: wheelHeight,
+                                            itemExtent: itemExtent,
+                                            fontSize: fontSize,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          _buildWheel(
+                                            label: '',
+                                            controller: _secondsController,
+                                            onChanged: _setSeconds,
+                                            wheelHeight: wheelHeight,
+                                            itemExtent: itemExtent,
+                                            fontSize: fontSize,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      if (_showBoundaryWarning)
+                                        const Padding(
+                                          padding: EdgeInsets.only(top: 6),
+                                          child: Text(
+                                            '24:00:00 초과 불가 — 23시간대로 조정됨',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              color: Colors.red,
+                                              fontSize: 12,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -532,7 +582,7 @@ class _TimerHomePageState extends State<TimerHomePage>
                                     enabled: isLiquidGlass,
                                     filled: false,
                                     onPressed: _reset,
-                                    child: const Text('Reset'),
+                                    child: const Text('reset'),
                                   ),
                                 ),
                               ],
@@ -569,11 +619,15 @@ class _GlassPanel extends StatelessWidget {
   final Widget child;
   final BorderRadius borderRadius;
   final EdgeInsets padding;
+  final Color? fillColor;
+  final Color? borderColor;
 
   const _GlassPanel({
     required this.child,
     this.borderRadius = const BorderRadius.all(Radius.circular(16)),
     this.padding = const EdgeInsets.all(12),
+    this.fillColor,
+    this.borderColor,
   });
 
   @override
@@ -585,9 +639,13 @@ class _GlassPanel extends StatelessWidget {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
+            color: (fillColor ?? _GlassPalette.panelBase).withOpacity(0.14),
             borderRadius: borderRadius,
-            border: Border.all(color: Colors.white.withOpacity(0.35)),
+            border: Border.all(
+              color: (borderColor ?? _GlassPalette.panelBorder).withOpacity(
+                0.65,
+              ),
+            ),
           ),
           child: child,
         ),
@@ -596,46 +654,200 @@ class _GlassPanel extends StatelessWidget {
   }
 }
 
-class _GlassButton extends StatelessWidget {
+class _GlassButton extends StatefulWidget {
   final bool enabled;
   final bool filled;
   final VoidCallback? onPressed;
   final Widget child;
+  final Color? textColor;
+  final Color? disabledTextColor;
 
   const _GlassButton({
     required this.enabled,
     required this.filled,
     required this.onPressed,
     required this.child,
+    this.textColor,
+    this.disabledTextColor,
   });
 
   @override
+  State<_GlassButton> createState() => _GlassButtonState();
+}
+
+class _GlassButtonState extends State<_GlassButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (!mounted) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (!enabled) {
-      return filled
-          ? FilledButton(onPressed: onPressed, child: child)
-          : OutlinedButton(onPressed: onPressed, child: child);
+    if (!widget.enabled) {
+      return widget.filled
+          ? FilledButton(onPressed: widget.onPressed, child: widget.child)
+          : OutlinedButton(onPressed: widget.onPressed, child: widget.child);
     }
     return GestureDetector(
-      onTap: onPressed,
+      onTap: widget.onPressed,
+      onTapDown: (_) => _setPressed(true),
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
       behavior: HitTestBehavior.opaque,
-      child: _GlassPanel(
-        borderRadius: BorderRadius.circular(999),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Center(
-          child: DefaultTextStyle.merge(
-            style: TextStyle(
-              color: onPressed == null
-                  ? Colors.white.withOpacity(0.4)
-                  : Colors.white,
-              fontWeight: FontWeight.w600,
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+        scale: _pressed ? 0.96 : 1.0,
+        child: Stack(
+          children: [
+            CustomPaint(
+              painter: _ButtonOutlinePainter(),
+              child: _GlassPanel(
+                borderRadius: BorderRadius.circular(999),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                child: Center(
+                  child: DefaultTextStyle.merge(
+                    style: TextStyle(
+                      color: widget.onPressed == null
+                          ? (widget.disabledTextColor ??
+                                _GlassPalette.buttonDisabledText)
+                          : (widget.textColor ?? _GlassPalette.buttonText),
+                      fontWeight: FontWeight.w600,
+                    ),
+                    child: widget.child,
+                  ),
+                ),
+              ),
             ),
-            child: child,
-          ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 140),
+                  opacity: _pressed ? 0.55 : 0.0,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.black.withOpacity(0.12),
+                          const Color(0xFFF4D7AE).withOpacity(0.35),
+                          const Color(0xFFF0CFA3).withOpacity(0.20),
+                          Colors.black.withOpacity(0.10),
+                        ],
+                        stops: const [0.0, 0.35, 0.7, 1.0],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _ButtonOutlinePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(999));
+    final shadow = Paint()
+      ..color = Colors.black.withOpacity(0.12)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    final inner = Paint()
+      ..color = Colors.black.withOpacity(0.10)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.inner, 3);
+    canvas.drawRRect(rrect, shadow);
+    canvas.drawRRect(rrect, inner);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ButtonOutlinePainter oldDelegate) => false;
+}
+
+class _WheelBoxOutlinePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(16));
+    final shadow = Paint()
+      ..color = Colors.black.withOpacity(0.12)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    final inner = Paint()
+      ..color = Colors.black.withOpacity(0.10)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..maskFilter = const MaskFilter.blur(BlurStyle.inner, 3);
+    canvas.drawRRect(rrect, shadow);
+    canvas.drawRRect(rrect, inner);
+  }
+
+  @override
+  bool shouldRepaint(covariant _WheelBoxOutlinePainter oldDelegate) => false;
+}
+
+class _HeaderBottomEdge extends StatelessWidget implements PreferredSizeWidget {
+  final PreferredSizeWidget child;
+
+  const _HeaderBottomEdge({required this.child});
+
+  @override
+  Size get preferredSize => child.preferredSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        child,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SizedBox(
+            height: 4,
+            child: CustomPaint(painter: _HeaderBottomEdgePainter()),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HeaderBottomEdgePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final shadow = Paint()
+      ..color = Colors.black.withOpacity(0.12)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    final inner = Paint()
+      ..color = Colors.black.withOpacity(0.10)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..maskFilter = const MaskFilter.blur(BlurStyle.inner, 3);
+    canvas.drawLine(Offset(0, y), Offset(size.width, y), shadow);
+    canvas.drawLine(Offset(0, y), Offset(size.width, y), inner);
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeaderBottomEdgePainter oldDelegate) => false;
 }
 
 class HourglassPainter extends CustomPainter {
@@ -643,12 +855,14 @@ class HourglassPainter extends CustomPainter {
   final Duration activeDuration;
   final Duration remaining;
   final DateTime? endTime;
+  final bool forceIdleFull;
 
   HourglassPainter({
     required this.status,
     required this.activeDuration,
     required this.remaining,
     required this.endTime,
+    this.forceIdleFull = false,
   });
 
   @override
@@ -666,11 +880,7 @@ class HourglassPainter extends CustomPainter {
     final glassFill = Paint()
       ..style = PaintingStyle.fill
       ..shader = const LinearGradient(
-        colors: [
-          Color(0x66FFFFFF),
-          Color(0x22FFFFFF),
-          Color(0x10FFFFFF),
-        ],
+        colors: [Color(0x66FFFFFF), Color(0x22FFFFFF), Color(0x10FFFFFF)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ).createShader(Offset.zero & size);
@@ -681,11 +891,31 @@ class HourglassPainter extends CustomPainter {
       ..strokeWidth = 9
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9);
 
+    final glassBodyEdgeShadow = Paint()
+      ..color = Colors.black.withOpacity(0.10)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+
     final innerShadow = Paint()
       ..color = Colors.black.withOpacity(0.14)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4
       ..maskFilter = const MaskFilter.blur(BlurStyle.inner, 5);
+
+    final baseGrainDark = Paint()
+      ..color = const Color(0xFF8A5A33).withOpacity(0.28)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.9;
+    final baseGrainLight = Paint()
+      ..color = const Color(0xFFC99B6B).withOpacity(0.22)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    final baseInnerShadow = Paint()
+      ..color = const Color(0xFF6A3F20).withOpacity(0.12)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..maskFilter = const MaskFilter.blur(BlurStyle.inner, 3.2);
 
     final sandFill = Paint()
       ..style = PaintingStyle.fill
@@ -716,12 +946,16 @@ class HourglassPainter extends CustomPainter {
 
     final hasActive = activeDuration.inMilliseconds > 0;
     final hasRemaining = remaining.inMilliseconds > 0;
-    final drawUpper = hasActive && hasRemaining;
-    final drawLower = status != TimerStatus.idle &&
+    final showIdleSand = status == TimerStatus.idle && !hasActive;
+    final drawUpper =
+        (hasActive && hasRemaining) || showIdleSand || forceIdleFull;
+    final drawLower =
+        !forceIdleFull &&
+        status != TimerStatus.idle &&
         hasActive &&
         (hasRemaining || status == TimerStatus.finished);
 
-    final progress = _progress();
+    final progress = forceIdleFull ? 1.0 : (showIdleSand ? 1.0 : _progress());
     final upperFill = progress.clamp(0.0, 1.0);
     final lowerFill = (1 - progress).clamp(0.0, 1.0);
 
@@ -737,8 +971,10 @@ class HourglassPainter extends CustomPainter {
     final cornerRadius = (size.width * 0.06).clamp(6.0, 18.0);
     final innerInset = size.width * 0.03;
     final neckNarrowExtra = neckInset * 1.1;
-    final innerNeckInset = (neckInset + innerInset - neckNarrowExtra)
-        .clamp(size.width * 0.01, neckInset + innerInset);
+    final innerNeckInset = (neckInset + innerInset - neckNarrowExtra).clamp(
+      size.width * 0.01,
+      neckInset + innerInset,
+    );
     final capHeight = size.height * 0.055;
     final capWidthInset = size.width * 0.001;
 
@@ -909,6 +1145,17 @@ class HourglassPainter extends CustomPainter {
     }
     canvas.restore();
 
+    canvas.save();
+    final bodyTop = topCap.outerRect.bottom + 1;
+    final bodyBottom = bottomCap.outerRect.top - 1;
+    if (bodyBottom > bodyTop) {
+      canvas.clipRect(
+        Rect.fromLTWH(0, bodyTop, size.width, bodyBottom - bodyTop),
+      );
+      canvas.drawPath(outlinePath, glassBodyEdgeShadow);
+    }
+    canvas.restore();
+
     if (status == TimerStatus.running && hasRemaining) {
       final streamBottom = midY + (bottom - midY) * 0.65;
       _drawSandStream(
@@ -923,14 +1170,60 @@ class HourglassPainter extends CustomPainter {
 
     canvas.restore();
 
-    canvas.drawRRect(topCap, glassStroke);
-    canvas.drawRRect(bottomCap, glassStroke);
-    canvas.drawPath(outlinePath, glassStroke);
+    final baseRect = bottomCap.outerRect;
+    final baseFill = Paint()
+      ..style = PaintingStyle.fill
+      ..shader = const LinearGradient(
+        colors: [Color(0xFFC69562), Color(0xFFA86E41), Color(0xFF91592E)],
+        stops: [0.0, 0.55, 1.0],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(baseRect);
 
-    final highlightPath = Path()
-      ..addRRect(topCap.deflate(2))
-      ..addRRect(bottomCap.deflate(2));
-    canvas.drawPath(highlightPath, glassInnerStroke);
+    void drawWoodCap(RRect cap) {
+      final rect = cap.outerRect;
+      final fill = Paint()
+        ..style = PaintingStyle.fill
+        ..shader = const LinearGradient(
+          colors: [Color(0xFFD7BD9B), Color(0xFFBF9872), Color(0xFFA67D59)],
+          stops: [0.0, 0.55, 1.0],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ).createShader(rect);
+
+      canvas.drawRRect(cap, fill);
+      canvas.drawRRect(cap, baseInnerShadow);
+
+      canvas.save();
+      canvas.clipRRect(cap);
+      final grainTop = rect.top + rect.height * 0.22;
+      final grainBottom = rect.bottom - rect.height * 0.18;
+      final grainStep = (rect.height * 0.12).clamp(2.5, 5.5);
+      final grainWidth = rect.width * 0.08;
+      for (double y = grainTop; y < grainBottom; y += grainStep) {
+        final phase = (y * 0.23) % 1.0;
+        final amplitude = grainWidth * (0.35 + phase * 0.35);
+        final cx = rect.center.dx;
+        final path = Path()
+          ..moveTo(rect.left - 8, y)
+          ..quadraticBezierTo(cx - amplitude, y - grainStep * 0.4, cx, y)
+          ..quadraticBezierTo(
+            cx + amplitude,
+            y + grainStep * 0.4,
+            rect.right + 8,
+            y,
+          );
+        canvas.drawPath(path, phase > 0.5 ? baseGrainDark : baseGrainLight);
+      }
+      canvas.restore();
+    }
+
+    drawWoodCap(bottomCap);
+    drawWoodCap(topCap);
+
+    // Remove outer white glass outline.
+
+    // Removed top cap glass inner highlight for wood finish.
 
     final highlight = Paint()
       ..color = Colors.white.withOpacity(0.55)
