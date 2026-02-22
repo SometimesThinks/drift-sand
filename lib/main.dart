@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wheel_picker/wheel_picker.dart';
 
 void main() {
@@ -82,6 +84,11 @@ class _TimerHomePageState extends State<TimerHomePage>
   AnimationController? _repaintController;
   bool? _showControls = true;
   bool? _soundOn = true;
+  bool _hasNotifiedCompletion = false;
+  bool _sandLooping = false;
+
+  final AudioPlayer _fxPlayer = AudioPlayer();
+  final AudioPlayer _sandPlayer = AudioPlayer();
 
   late final WheelPickerController _hoursController;
   late final WheelPickerController _minutesController;
@@ -105,6 +112,7 @@ class _TimerHomePageState extends State<TimerHomePage>
   void initState() {
     super.initState();
     _ensureRepaintController();
+    _sandPlayer.setReleaseMode(ReleaseMode.loop);
     _hoursController = WheelPickerController(
       itemCount: _maxHours + 1,
       initialIndex: _selectedHours,
@@ -137,11 +145,13 @@ class _TimerHomePageState extends State<TimerHomePage>
       _syncWheelsToDuration(_remaining);
     }
     if (_remaining.inMilliseconds <= 0) return;
+    _hasNotifiedCompletion = false;
     _status = TimerStatus.running;
     _endTime = DateTime.now().add(_remaining);
     _lastRenderedSeconds = -1;
     _repaintController?.repeat();
     _startTicker();
+    _startSandLoopIfEnabled();
     setState(() {});
   }
 
@@ -152,6 +162,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     _syncRemaining();
     _syncWheelsToDuration(_remaining);
     _repaintController?.stop();
+    _stopSandLoop();
     setState(() {});
   }
 
@@ -164,12 +175,14 @@ class _TimerHomePageState extends State<TimerHomePage>
     _selectedSeconds = 0;
     _remaining = Duration.zero;
     _activeDuration = Duration.zero;
+    _hasNotifiedCompletion = false;
     _hoursController.setCurrent(0);
     _minutesController.setCurrent(0);
     _secondsController.setCurrent(0);
     _endTime = null;
     _lastRenderedSeconds = -1;
     _repaintController?.stop();
+    _stopSandLoop();
     setState(() {});
   }
 
@@ -196,6 +209,8 @@ class _TimerHomePageState extends State<TimerHomePage>
       _status = TimerStatus.finished;
       _remaining = Duration.zero;
       _syncWheelsToDuration(_remaining);
+      _stopSandLoop();
+      _notifyCompletion();
       _repaintController?.stop();
       setState(() {});
     }
@@ -217,6 +232,36 @@ class _TimerHomePageState extends State<TimerHomePage>
     final mm = minutes.toString().padLeft(2, '0');
     final ss = seconds.toString().padLeft(2, '0');
     return '$hh:$mm:$ss';
+  }
+
+  Future<void> _startSandLoopIfEnabled() async {
+    if (!(_soundOn ?? true)) return;
+    if (_sandLooping) return;
+    _sandLooping = true;
+    await _sandPlayer.setVolume(0.35);
+    await _sandPlayer.play(
+      AssetSource('audio/sand-onto-sand.mp3'),
+    );
+  }
+
+  Future<void> _stopSandLoop() async {
+    if (!_sandLooping) return;
+    _sandLooping = false;
+    await _sandPlayer.stop();
+  }
+
+  Future<void> _notifyCompletion() async {
+    if (_hasNotifiedCompletion) return;
+    _hasNotifiedCompletion = true;
+    final soundOn = _soundOn ?? true;
+    if (soundOn) {
+      await _fxPlayer.setVolume(0.35);
+      await _fxPlayer.play(
+        AssetSource('audio/ding-notification.mp3'),
+      );
+    } else {
+      HapticFeedback.vibrate();
+    }
   }
 
   Duration _selectedDuration() {
@@ -337,6 +382,8 @@ class _TimerHomePageState extends State<TimerHomePage>
     _ticker?.cancel();
     _boundaryTimer?.cancel();
     _repaintController?.dispose();
+    _fxPlayer.dispose();
+    _sandPlayer.dispose();
     _hoursController.dispose();
     _minutesController.dispose();
     _secondsController.dispose();
@@ -470,11 +517,17 @@ class _TimerHomePageState extends State<TimerHomePage>
                                     icon: (_soundOn ?? true)
                                         ? Icons.volume_up_rounded
                                         : Icons.volume_off_rounded,
-                                    onTap: () =>
-                                        setState(
-                                          () =>
-                                              _soundOn = !(_soundOn ?? true),
-                                        ),
+                                    onTap: () {
+                                      final next = !(_soundOn ?? true);
+                                      setState(() => _soundOn = next);
+                                      if (_status == TimerStatus.running) {
+                                        if (next) {
+                                          _startSandLoopIfEnabled();
+                                        } else {
+                                          _stopSandLoop();
+                                        }
+                                      }
+                                    },
                                   ),
                                     const SizedBox(width: 6),
                                     _MiniIconButton(
