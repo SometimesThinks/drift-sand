@@ -2,11 +2,25 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:wheel_picker/wheel_picker.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb) {
+    await MobileAds.instance.initialize();
+    await MobileAds.instance.updateRequestConfiguration(
+      RequestConfiguration(
+        testDeviceIds: ['6EB17C8CA891CC5E0779D10DE0558579'],
+      ),
+    );
+  }
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
   runApp(const DriftSandApp());
 }
 
@@ -28,6 +42,7 @@ class DriftSandApp extends StatelessWidget {
           titleSmall: const TextStyle(fontWeight: FontWeight.w600),
         ),
         appBarTheme: const AppBarTheme(
+          centerTitle: true,
           titleTextStyle: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -65,6 +80,10 @@ class TimerHomePage extends StatefulWidget {
 
 class _TimerHomePageState extends State<TimerHomePage>
     with SingleTickerProviderStateMixin {
+  static const String _testBannerAdUnitIdAndroid =
+      'ca-app-pub-2086557185075895/5187660028';
+  static const String _testBannerAdUnitIdIOS =
+      'ca-app-pub-3940256099942544/2435281174';
   static const int _tickIntervalMs = 200;
   static const int _maxHours = 24;
   static const int _maxMinutes = 59;
@@ -89,6 +108,15 @@ class _TimerHomePageState extends State<TimerHomePage>
 
   final AudioPlayer _fxPlayer = AudioPlayer();
   final AudioPlayer _sandPlayer = AudioPlayer();
+  BannerAd? _bannerAd;
+  bool _isBannerReady = false;
+
+  String get _bannerAdUnitId {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return _testBannerAdUnitIdIOS;
+    }
+    return _testBannerAdUnitIdAndroid;
+  }
 
   late final WheelPickerController _hoursController;
   late final WheelPickerController _minutesController;
@@ -113,6 +141,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     super.initState();
     _ensureRepaintController();
     _sandPlayer.setReleaseMode(ReleaseMode.loop);
+    _loadBannerAd();
     _hoursController = WheelPickerController(
       itemCount: _maxHours + 1,
       initialIndex: _selectedHours,
@@ -223,6 +252,30 @@ class _TimerHomePageState extends State<TimerHomePage>
     _remaining = diff.isNegative ? Duration.zero : diff;
   }
 
+  void _loadBannerAd() {
+    if (kIsWeb) return;
+    _bannerAd?.dispose();
+    _bannerAd = BannerAd(
+      size: AdSize.banner,
+      adUnitId: _bannerAdUnitId,
+      request: const AdRequest(),
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          if (!mounted) {
+            ad.dispose();
+            return;
+          }
+          setState(() => _isBannerReady = true);
+        },
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+          if (!mounted) return;
+          setState(() => _isBannerReady = false);
+        },
+      ),
+    )..load();
+  }
+
   String _formatDuration(Duration duration) {
     final totalSeconds = duration.inSeconds;
     final hours = totalSeconds ~/ 3600;
@@ -238,7 +291,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     if (!(_soundOn ?? true)) return;
     if (_sandLooping) return;
     _sandLooping = true;
-    await _sandPlayer.setVolume(0.35);
+    await _sandPlayer.setVolume(1.0);
     await _sandPlayer.play(
       AssetSource('audio/sand-onto-sand.mp3'),
     );
@@ -255,7 +308,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     _hasNotifiedCompletion = true;
     final soundOn = _soundOn ?? true;
     if (soundOn) {
-      await _fxPlayer.setVolume(0.35);
+      await _fxPlayer.setVolume(0.8);
       await _fxPlayer.play(
         AssetSource('audio/ding-notification.mp3'),
       );
@@ -384,6 +437,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     _repaintController?.dispose();
     _fxPlayer.dispose();
     _sandPlayer.dispose();
+    _bannerAd?.dispose();
     _hoursController.dispose();
     _minutesController.dispose();
     _secondsController.dispose();
@@ -407,6 +461,7 @@ class _TimerHomePageState extends State<TimerHomePage>
       appBar: _HeaderBottomEdge(
         child: AppBar(
           title: const Text('Drift Sand'),
+          centerTitle: true,
           backgroundColor: isLiquidGlass
               ? Colors.transparent
               : Colors.brown.shade100,
@@ -429,31 +484,42 @@ class _TimerHomePageState extends State<TimerHomePage>
       ),
       extendBodyBehindAppBar: false,
       bottomNavigationBar: SafeArea(
-        child: _GlassWrapper(
-          enabled: isLiquidGlass,
-          child: Container(
-            height: 42,
-            alignment: Alignment.center,
-            margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-            decoration: BoxDecoration(
-              color: isLiquidGlass
-                  ? Colors.white.withOpacity(0.12)
-                  : Colors.brown.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isLiquidGlass
-                    ? Colors.white.withOpacity(0.35)
-                    : Colors.brown.shade200,
-              ),
-            ),
-            child: Text(
-              'Ad Banner Placeholder',
-              style: TextStyle(
-                fontSize: 12,
-                color: isLiquidGlass ? Colors.black87 : Colors.brown,
-                letterSpacing: 0.3,
-              ),
-            ),
+        child: SizedBox(
+          height: (_bannerAd?.size.height.toDouble() ?? 50) + 16,
+          child: Center(
+            child: _isBannerReady && _bannerAd != null
+                ? SizedBox(
+                    width: _bannerAd!.size.width.toDouble(),
+                    height: _bannerAd!.size.height.toDouble(),
+                    child: AdWidget(ad: _bannerAd!),
+                  )
+                : _GlassWrapper(
+                    enabled: isLiquidGlass,
+                    child: Container(
+                      height: 42,
+                      alignment: Alignment.center,
+                      margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                      decoration: BoxDecoration(
+                        color: isLiquidGlass
+                            ? Colors.white.withOpacity(0.12)
+                            : Colors.brown.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isLiquidGlass
+                              ? Colors.white.withOpacity(0.35)
+                              : Colors.brown.shade200,
+                        ),
+                      ),
+                      child: Text(
+                        'Ad Banner Placeholder',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isLiquidGlass ? Colors.black87 : Colors.brown,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         ),
       ),
@@ -467,238 +533,245 @@ class _TimerHomePageState extends State<TimerHomePage>
                 )
               : null,
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final scale = (constraints.maxHeight / 720).clamp(1.0, 1.1);
-              final gap = 20 * scale;
-              final topGap = 0.0;
-              final wheelHeight = 72 * scale * 1.3;
-              final itemExtent = 38 * scale * 1.3;
-              final fontSize = 22 * scale * 1.3;
-              final maxHourglass = constraints.maxHeight * 0.6;
-              final hourglassSize = (320 * scale * 1.3).clamp(
-                260.0,
-                maxHourglass,
-              );
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: double.infinity,
-                            child: Align(
-                              alignment: Alignment.topRight,
-                              child: Container(
-                              margin: const EdgeInsets.only(
-                                top: 8,
-                                bottom: 10,
-                              ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _MiniIconButton(
-                                      icon: (_showControls ?? true)
-                                          ? Icons.arrow_drop_down_rounded
-                                          : Icons.arrow_drop_up_rounded,
-                                      onTap: () => setState(
-                                        () => _showControls = !(
-                                          _showControls ?? true),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final scale = (constraints.maxHeight / 720).clamp(1.0, 1.1);
+            final gap = 20 * scale;
+            final topGap = 0.0;
+            final wheelHeight = 72 * scale * 1.3;
+            final itemExtent = 38 * scale * 1.3;
+            final fontSize = 22 * scale * 1.3;
+            final maxHourglass = constraints.maxHeight * 0.6;
+            final hourglassSize = (320 * scale * 1.3).clamp(
+              260.0,
+              maxHourglass,
+            );
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: Align(
+                                alignment: Alignment.topRight,
+                                child: Container(
+                                  margin: const EdgeInsets.only(
+                                    top: 8,
+                                    bottom: 10,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _MiniIconButton(
+                                        icon: (_showControls ?? true)
+                                            ? Icons.arrow_drop_down_rounded
+                                            : Icons.arrow_drop_up_rounded,
+                                        onTap: () => setState(
+                                          () => _showControls = !(
+                                            _showControls ?? true),
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                  _MiniIconButton(
-                                    icon: (_soundOn ?? true)
-                                        ? Icons.volume_up_rounded
-                                        : Icons.volume_off_rounded,
-                                    onTap: () {
-                                      final next = !(_soundOn ?? true);
-                                      setState(() => _soundOn = next);
-                                      if (_status == TimerStatus.running) {
-                                        if (next) {
-                                          _startSandLoopIfEnabled();
-                                        } else {
-                                          _stopSandLoop();
-                                        }
-                                      }
-                                    },
-                                  ),
-                                    const SizedBox(width: 6),
-                                    _MiniIconButton(
-                                      icon: Icons.settings_rounded,
-                                      onTap: () {},
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: gap * 0.6),
-                          Stack(
-                            children: [
-                              _GlassWrapper(
-                                enabled: false,
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: isLiquidGlass
-                                        ? Colors.white.withOpacity(0.06)
-                                        : null,
-                                  ),
-                                  child: SizedBox(
-                                    height: hourglassSize,
-                                    width: hourglassSize,
-                                    child: AspectRatio(
-                                      aspectRatio: 1.0,
-                                      child: AnimatedBuilder(
-                                        animation:
-                                            _repaintController ??
-                                            const AlwaysStoppedAnimation(0),
-                                        builder: (context, _) {
-                                          final selected = _selectedDuration();
-                                          final idleEmpty =
-                                              _status == TimerStatus.idle &&
-                                              selected.inMilliseconds == 0;
-                                          final forceIdleFull = idleEmpty;
-                                          final displayDuration =
-                                              _status == TimerStatus.idle
-                                              ? (idleEmpty
-                                                    ? const Duration(seconds: 1)
-                                                    : selected)
-                                              : _activeDuration;
-                                          final displayRemaining =
-                                              _status == TimerStatus.idle
-                                              ? (idleEmpty
-                                                    ? const Duration(seconds: 1)
-                                                    : selected)
-                                              : _remaining;
-                                          final displayEndTime =
-                                              _status == TimerStatus.running
-                                              ? _endTime
-                                              : null;
-                                          return CustomPaint(
-                                            painter: HourglassPainter(
-                                              status: _status,
-                                              activeDuration: displayDuration,
-                                              remaining: displayRemaining,
-                                              endTime: displayEndTime,
-                                              forceIdleFull: forceIdleFull,
-                                            ),
-                                          );
+                                      const SizedBox(width: 6),
+                                      _MiniIconButton(
+                                        icon: (_soundOn ?? true)
+                                            ? Icons.volume_up_rounded
+                                            : Icons.volume_off_rounded,
+                                        onTap: () {
+                                          final next = !(_soundOn ?? true);
+                                          setState(() => _soundOn = next);
+                                          if (_status == TimerStatus.running) {
+                                            if (next) {
+                                              _startSandLoopIfEnabled();
+                                            } else {
+                                              _stopSandLoop();
+                                            }
+                                          }
                                         },
                                       ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: gap),
-                          if (_showControls ?? true)
-                            Opacity(
-                              opacity: _status == TimerStatus.idle ? 1 : 0.6,
-                              child: IgnorePointer(
-                                ignoring: _status != TimerStatus.idle,
-                                child: CustomPaint(
-                                  painter: _WheelBoxOutlinePainter(),
-                                  child: _GlassWrapper(
-                                    enabled: isLiquidGlass,
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            _buildWheel(
-                                              label: '',
-                                              controller: _hoursController,
-                                              onChanged: _setHours,
-                                              wheelHeight: wheelHeight,
-                                              itemExtent: itemExtent,
-                                              fontSize: fontSize,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            _buildWheel(
-                                              label: '',
-                                              controller: _minutesController,
-                                              onChanged: _setMinutes,
-                                              wheelHeight: wheelHeight,
-                                              itemExtent: itemExtent,
-                                              fontSize: fontSize,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            _buildWheel(
-                                              label: '',
-                                              controller: _secondsController,
-                                              onChanged: _setSeconds,
-                                              wheelHeight: wheelHeight,
-                                              itemExtent: itemExtent,
-                                              fontSize: fontSize,
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        if (_showBoundaryWarning)
-                                          const Padding(
-                                            padding: EdgeInsets.only(top: 6),
-                                            child: Text(
-                                              '24:00:00 초과 불가 — 23시간대로 조정됨',
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                color: Colors.red,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
+                                      const SizedBox(width: 6),
+                                      _MiniIconButton(
+                                        icon: Icons.settings_rounded,
+                                        onTap: () {},
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ),
-                          SizedBox(height: gap),
-                          if (_showControls ?? true)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                            SizedBox(height: gap * 0.6),
+                            Stack(
                               children: [
-                                SizedBox(
-                                  width: 140,
-                                  child: _GlassButton(
-                                    enabled: isLiquidGlass,
-                                    filled: true,
-                                    onPressed: _isRunning
-                                        ? _pause
-                                        : (_canStart ? _start : null),
-                                    child: Text(primaryLabel),
+                                _GlassWrapper(
+                                  enabled: false,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: isLiquidGlass
+                                          ? Colors.white.withOpacity(0.06)
+                                          : null,
+                                    ),
+                                    child: SizedBox(
+                                      height: hourglassSize,
+                                      width: hourglassSize,
+                                      child: AspectRatio(
+                                        aspectRatio: 1.0,
+                                        child: AnimatedBuilder(
+                                          animation:
+                                              _repaintController ??
+                                              const AlwaysStoppedAnimation(0),
+                                          builder: (context, _) {
+                                            final selected = _selectedDuration();
+                                            final idleEmpty =
+                                                _status == TimerStatus.idle &&
+                                                selected.inMilliseconds == 0;
+                                            final forceIdleFull = idleEmpty;
+                                            final displayDuration =
+                                                _status == TimerStatus.idle
+                                                ? (idleEmpty
+                                                      ? const Duration(
+                                                          seconds: 1,
+                                                        )
+                                                      : selected)
+                                                : _activeDuration;
+                                            final displayRemaining =
+                                                _status == TimerStatus.idle
+                                                ? (idleEmpty
+                                                      ? const Duration(
+                                                          seconds: 1,
+                                                        )
+                                                      : selected)
+                                                : _remaining;
+                                            final displayEndTime =
+                                                _status == TimerStatus.running
+                                                ? _endTime
+                                                : null;
+                                            return CustomPaint(
+                                              painter: HourglassPainter(
+                                                status: _status,
+                                                activeDuration: displayDuration,
+                                                remaining: displayRemaining,
+                                                endTime: displayEndTime,
+                                                forceIdleFull: forceIdleFull,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                if (_status != TimerStatus.idle &&
-                                    _status != TimerStatus.running) ...[
-                                  const SizedBox(width: 12),
+                              ],
+                            ),
+                            SizedBox(height: gap),
+                            if (_showControls ?? true)
+                              Opacity(
+                                opacity: _status == TimerStatus.idle ? 1 : 0.6,
+                                child: IgnorePointer(
+                                  ignoring: _status != TimerStatus.idle,
+                                  child: CustomPaint(
+                                    painter: _WheelBoxOutlinePainter(),
+                                    child: _GlassWrapper(
+                                      enabled: isLiquidGlass,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              _buildWheel(
+                                                label: '',
+                                                controller: _hoursController,
+                                                onChanged: _setHours,
+                                                wheelHeight: wheelHeight,
+                                                itemExtent: itemExtent,
+                                                fontSize: fontSize,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              _buildWheel(
+                                                label: '',
+                                                controller: _minutesController,
+                                                onChanged: _setMinutes,
+                                                wheelHeight: wheelHeight,
+                                                itemExtent: itemExtent,
+                                                fontSize: fontSize,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              _buildWheel(
+                                                label: '',
+                                                controller: _secondsController,
+                                                onChanged: _setSeconds,
+                                                wheelHeight: wheelHeight,
+                                                itemExtent: itemExtent,
+                                                fontSize: fontSize,
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          if (_showBoundaryWarning)
+                                            const Padding(
+                                              padding: EdgeInsets.only(top: 6),
+                                              child: Text(
+                                                '24:00:00 초과 불가 — 23시간대로 조정됨',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  color: Colors.red,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            SizedBox(height: gap),
+                            if (_showControls ?? true)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
                                   SizedBox(
                                     width: 140,
                                     child: _GlassButton(
                                       enabled: isLiquidGlass,
-                                      filled: false,
-                                      onPressed: _reset,
-                                      child: const Text('reset'),
+                                      filled: true,
+                                      onPressed: _isRunning
+                                          ? _pause
+                                          : (_canStart ? _start : null),
+                                      child: Text(primaryLabel),
                                     ),
                                   ),
+                                  if (_status != TimerStatus.idle &&
+                                      _status != TimerStatus.running) ...[
+                                    const SizedBox(width: 12),
+                                    SizedBox(
+                                      width: 140,
+                                      child: _GlassButton(
+                                        enabled: isLiquidGlass,
+                                        filled: false,
+                                        onPressed: _reset,
+                                        child: const Text('reset'),
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                        ],
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              );
-            },
-          ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -925,7 +998,7 @@ class _MiniIconButton extends StatelessWidget {
             color: Colors.white.withOpacity(0.35),
           ),
         ),
-        child: Icon(icon, size: 16, color: const Color(0xFF5B4634)),
+        child: Icon(icon, size: 20, color: const Color(0xFF5B4634)),
       ),
     );
   }

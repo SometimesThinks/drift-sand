@@ -35,6 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   audioplayers: ^6.2.0
+  google_mobile_ads: ^6.0.0
   wheel_picker: ^0.2.2
 
 dev_dependencies:
