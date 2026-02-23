@@ -13,14 +13,10 @@ Future<void> main() async {
   if (!kIsWeb) {
     await MobileAds.instance.initialize();
     await MobileAds.instance.updateRequestConfiguration(
-      RequestConfiguration(
-        testDeviceIds: ['6EB17C8CA891CC5E0779D10DE0558579'],
-      ),
+      RequestConfiguration(testDeviceIds: ['6EB17C8CA891CC5E0779D10DE0558579']),
     );
   }
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const DriftSandApp());
 }
 
@@ -292,9 +288,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     if (_sandLooping) return;
     _sandLooping = true;
     await _sandPlayer.setVolume(1.0);
-    await _sandPlayer.play(
-      AssetSource('audio/sand-onto-sand.mp3'),
-    );
+    await _sandPlayer.play(AssetSource('audio/sand-onto-sand.ogg'));
   }
 
   Future<void> _stopSandLoop() async {
@@ -309,9 +303,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     final soundOn = _soundOn ?? true;
     if (soundOn) {
       await _fxPlayer.setVolume(0.8);
-      await _fxPlayer.play(
-        AssetSource('audio/ding-notification.mp3'),
-      );
+      await _fxPlayer.play(AssetSource('audio/ding-notification.mp3'));
     } else {
       HapticFeedback.vibrate();
     }
@@ -576,8 +568,8 @@ class _TimerHomePageState extends State<TimerHomePage>
                                             ? Icons.arrow_drop_down_rounded
                                             : Icons.arrow_drop_up_rounded,
                                         onTap: () => setState(
-                                          () => _showControls = !(
-                                            _showControls ?? true),
+                                          () => _showControls =
+                                              !(_showControls ?? true),
                                         ),
                                       ),
                                       const SizedBox(width: 6),
@@ -628,7 +620,8 @@ class _TimerHomePageState extends State<TimerHomePage>
                                               _repaintController ??
                                               const AlwaysStoppedAnimation(0),
                                           builder: (context, _) {
-                                            final selected = _selectedDuration();
+                                            final selected =
+                                                _selectedDuration();
                                             final idleEmpty =
                                                 _status == TimerStatus.idle &&
                                                 selected.inMilliseconds == 0;
@@ -994,9 +987,7 @@ class _MiniIconButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.16),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.35),
-          ),
+          border: Border.all(color: Colors.white.withOpacity(0.35)),
         ),
         child: Icon(icon, size: 20, color: const Color(0xFF5B4634)),
       ),
