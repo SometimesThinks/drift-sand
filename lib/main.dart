@@ -6,15 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:wheel_picker/wheel_picker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (!kIsWeb) {
     await MobileAds.instance.initialize();
-    await MobileAds.instance.updateRequestConfiguration(
-      RequestConfiguration(testDeviceIds: ['6EB17C8CA891CC5E0779D10DE0558579']),
-    );
   }
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const DriftSandApp());
@@ -55,7 +53,6 @@ class DriftSandApp extends StatelessWidget {
 enum TimerStatus { idle, running, paused, finished }
 
 class _GlassPalette {
-  static const Color seed = Color(0xFF8FBFA6);
   static const List<Color> backgroundGradient = [
     Color(0xFFF6ECD9),
     Color(0xFFEAD9BF),
@@ -75,11 +72,11 @@ class TimerHomePage extends StatefulWidget {
 }
 
 class _TimerHomePageState extends State<TimerHomePage>
-    with SingleTickerProviderStateMixin {
-  static const String _testBannerAdUnitIdAndroid =
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  static const String _bannerAdUnitIdAndroid =
       'ca-app-pub-2086557185075895/5187660028';
-  static const String _testBannerAdUnitIdIOS =
-      'ca-app-pub-3940256099942544/2435281174';
+  static const String _bannerAdUnitIdIOS =
+      'ca-app-pub-3940256099942544/2934735716';
   static const int _tickIntervalMs = 200;
   static const int _maxHours = 24;
   static const int _maxMinutes = 59;
@@ -109,9 +106,9 @@ class _TimerHomePageState extends State<TimerHomePage>
 
   String get _bannerAdUnitId {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      return _testBannerAdUnitIdIOS;
+      return _bannerAdUnitIdIOS;
     }
-    return _testBannerAdUnitIdAndroid;
+    return _bannerAdUnitIdAndroid;
   }
 
   late final WheelPickerController _hoursController;
@@ -135,6 +132,7 @@ class _TimerHomePageState extends State<TimerHomePage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ensureRepaintController();
     _sandPlayer.setReleaseMode(ReleaseMode.loop);
     _loadBannerAd();
@@ -159,7 +157,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     );
   }
 
-  void _start() {
+  Future<void> _start() async {
     _ensureRepaintController();
     if (_status == TimerStatus.idle) {
       _remaining = _selectedDuration();
@@ -177,10 +175,11 @@ class _TimerHomePageState extends State<TimerHomePage>
     _repaintController?.repeat();
     _startTicker();
     _startSandLoopIfEnabled();
+    await WakelockPlus.enable();
     setState(() {});
   }
 
-  void _pause() {
+  Future<void> _pause() async {
     _ticker?.cancel();
     _ticker = null;
     _status = TimerStatus.paused;
@@ -188,10 +187,11 @@ class _TimerHomePageState extends State<TimerHomePage>
     _syncWheelsToDuration(_remaining);
     _repaintController?.stop();
     _stopSandLoop();
+    await WakelockPlus.disable();
     setState(() {});
   }
 
-  void _reset() {
+  Future<void> _reset() async {
     _ticker?.cancel();
     _ticker = null;
     _status = TimerStatus.idle;
@@ -208,6 +208,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     _lastRenderedSeconds = -1;
     _repaintController?.stop();
     _stopSandLoop();
+    await WakelockPlus.disable();
     setState(() {});
   }
 
@@ -236,6 +237,7 @@ class _TimerHomePageState extends State<TimerHomePage>
       _syncWheelsToDuration(_remaining);
       _stopSandLoop();
       _notifyCompletion();
+      WakelockPlus.disable();
       _repaintController?.stop();
       setState(() {});
     }
@@ -423,9 +425,51 @@ class _TimerHomePageState extends State<TimerHomePage>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted) return;
+    if (_status != TimerStatus.running) return;
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _syncRemaining();
+        if (_remaining.inMilliseconds <= 0) {
+          _ticker?.cancel();
+          _ticker = null;
+          _status = TimerStatus.finished;
+          _remaining = Duration.zero;
+          _syncWheelsToDuration(_remaining);
+          _stopSandLoop();
+          _notifyCompletion();
+          WakelockPlus.disable();
+          _repaintController?.stop();
+          setState(() {});
+          return;
+        }
+        _lastRenderedSeconds = -1;
+        _repaintController?.repeat();
+        _startTicker();
+        WakelockPlus.enable();
+        setState(() {});
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        _ticker?.cancel();
+        _ticker = null;
+        _repaintController?.stop();
+        _stopSandLoop();
+        WakelockPlus.disable();
+        break;
+      case AppLifecycleState.hidden:
+        // No-op: treat like paused on platforms that support it.
+        break;
+    }
+  }
+
+  @override
   void dispose() {
     _ticker?.cancel();
     _boundaryTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _repaintController?.dispose();
     _fxPlayer.dispose();
     _sandPlayer.dispose();
@@ -433,6 +477,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     _hoursController.dispose();
     _minutesController.dispose();
     _secondsController.dispose();
+    WakelockPlus.disable();
     super.dispose();
   }
 

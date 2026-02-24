@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   audioplayers: ^6.2.0
   google_mobile_ads: ^6.0.0
+  wakelock_plus: ^1.4.0
   wheel_picker: ^0.2.2
 
 dev_dependencies:
@@ -87,6 +88,7 @@ flutter:
   assets:
     - assets/audio/ding-notification.mp3
     - assets/audio/sand-onto-sand.ogg
+    - assets/image/logo.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
