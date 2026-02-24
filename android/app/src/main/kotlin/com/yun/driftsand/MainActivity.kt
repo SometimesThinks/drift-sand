@@ -1,4 +1,4 @@
-package com.example.drift_sand
+package com.yun.driftsand
 
 import io.flutter.embedding.android.FlutterActivity
 
