@@ -12,6 +12,9 @@ import 'package:wheel_picker/wheel_picker.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (!kIsWeb) {
+    await MobileAds.instance.updateRequestConfiguration(
+      RequestConfiguration(testDeviceIds: ['6EB17C8CA891CC5E0779D10DE0558579']),
+    );
     await MobileAds.instance.initialize();
   }
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -522,7 +525,7 @@ class _TimerHomePageState extends State<TimerHomePage>
       extendBodyBehindAppBar: false,
       bottomNavigationBar: SafeArea(
         child: SizedBox(
-          height: (_bannerAd?.size.height.toDouble() ?? 50) + 16,
+          height: _bannerAd?.size.height.toDouble() ?? 50,
           child: Center(
             child: _isBannerReady && _bannerAd != null
                 ? SizedBox(
@@ -533,9 +536,9 @@ class _TimerHomePageState extends State<TimerHomePage>
                 : _GlassWrapper(
                     enabled: isLiquidGlass,
                     child: Container(
-                      height: 42,
+                      height: _bannerAd?.size.height.toDouble() ?? 50,
                       alignment: Alignment.center,
-                      margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                      margin: const EdgeInsets.symmetric(horizontal: 24),
                       decoration: BoxDecoration(
                         color: isLiquidGlass
                             ? Colors.white.withOpacity(0.12)
