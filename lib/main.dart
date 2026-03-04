@@ -7,14 +7,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:wheel_picker/wheel_picker.dart';
 
+const String _prefsLocaleKey = 'app_locale';
+final ValueNotifier<String?> _localeCodeNotifier = ValueNotifier<String?>(null);
+final ValueNotifier<Locale?> _localeNotifier = ValueNotifier<Locale?>(null);
+
+Future<void> _setLocaleCode(String code) async {
+  _localeCodeNotifier.value = code;
+  _localeNotifier.value = Locale(code);
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(_prefsLocaleKey, code);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final storedLocale = prefs.getString(_prefsLocaleKey);
+  _localeCodeNotifier.value = storedLocale;
+  _localeNotifier.value = storedLocale == null ? null : Locale(storedLocale);
   if (!kIsWeb) {
     await MobileAds.instance.updateRequestConfiguration(
-      RequestConfiguration(testDeviceIds: ['6EB17C8CA891CC5E0779D10DE0558579']),
+      RequestConfiguration(
+        testDeviceIds: ['6EB17C8CA891CC5E0779D10DE0558579'],
+      ),
     );
     await MobileAds.instance.initialize();
   }
@@ -27,39 +45,46 @@ class DriftSandApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Drift Sand',
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('en'),
-        Locale('ko'),
-        Locale('ja'),
-      ],
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8FBFA6)),
-        useMaterial3: true,
-        fontFamily: 'NotoSans',
-        fontFamilyFallback: const ['NotoSansKR', 'NotoSansJP'],
-        textTheme: ThemeData.light().textTheme.copyWith(
-          titleLarge: const TextStyle(fontWeight: FontWeight.w600),
-          titleMedium: const TextStyle(fontWeight: FontWeight.w600),
-          titleSmall: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          titleTextStyle: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF5B4634),
+    return ValueListenableBuilder<Locale?>(
+      valueListenable: _localeNotifier,
+      builder: (context, locale, _) {
+        return MaterialApp(
+          title: 'Drift Sand',
+          locale: locale,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('en'),
+            Locale('ko'),
+            Locale('ja'),
+          ],
+          theme: ThemeData(
+            colorScheme:
+                ColorScheme.fromSeed(seedColor: const Color(0xFF8FBFA6)),
+            useMaterial3: true,
+            fontFamily: 'NotoSans',
+            fontFamilyFallback: const ['NotoSansKR', 'NotoSansJP'],
+            textTheme: ThemeData.light().textTheme.copyWith(
+              titleLarge: const TextStyle(fontWeight: FontWeight.w600),
+              titleMedium: const TextStyle(fontWeight: FontWeight.w600),
+              titleSmall: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            appBarTheme: const AppBarTheme(
+              centerTitle: true,
+              titleTextStyle: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF5B4634),
+              ),
+              iconTheme: IconThemeData(color: Color(0xFF5B4634)),
+            ),
           ),
-          iconTheme: IconThemeData(color: Color(0xFF5B4634)),
-        ),
-      ),
-      home: const TimerHomePage(),
+          home: const TimerHomePage(),
+        );
+      },
     );
   }
 }
@@ -675,7 +700,14 @@ class _TimerHomePageState extends State<TimerHomePage>
                                       const SizedBox(width: 6),
                                       _MiniIconButton(
                                         icon: Icons.settings_rounded,
-                                        onTap: () {},
+                                        onTap: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const SettingsScreen(),
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ],
                                   ),
@@ -866,6 +898,128 @@ class _ButtonLabels {
     required this.resume,
     required this.reset,
   });
+}
+
+String _normalizeLocaleCode(String code) {
+  switch (code) {
+    case 'ko':
+    case 'en':
+    case 'ja':
+      return code;
+    default:
+      return 'en';
+  }
+}
+
+_SettingsStrings _settingsStringsForLocale(Locale locale) {
+  if (locale.languageCode == 'ko') {
+    return const _SettingsStrings(
+      title: '설정',
+      language: '언어',
+      korean: '한국어',
+      english: '영어',
+      japanese: '일본어',
+    );
+  }
+  if (locale.languageCode == 'ja') {
+    return const _SettingsStrings(
+      title: '設定',
+      language: '言語',
+      korean: '韓国語',
+      english: '英語',
+      japanese: '日本語',
+    );
+  }
+  return const _SettingsStrings(
+    title: 'Settings',
+    language: 'Language',
+    korean: 'Korean',
+    english: 'English',
+    japanese: 'Japanese',
+  );
+}
+
+class _SettingsStrings {
+  final String title;
+  final String language;
+  final String korean;
+  final String english;
+  final String japanese;
+
+  const _SettingsStrings({
+    required this.title,
+    required this.language,
+    required this.korean,
+    required this.english,
+    required this.japanese,
+  });
+}
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = _settingsStringsForLocale(
+      Localizations.localeOf(context),
+    );
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(strings.title),
+        centerTitle: true,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            strings.language,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          ValueListenableBuilder<String?>(
+            valueListenable: _localeCodeNotifier,
+            builder: (context, code, _) {
+              final systemCode = _normalizeLocaleCode(
+                Localizations.localeOf(context).languageCode,
+              );
+              final selectedCode = code ?? systemCode;
+              return Column(
+                children: [
+                  RadioListTile<String>(
+                    value: 'ko',
+                    groupValue: selectedCode,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      _setLocaleCode(value);
+                    },
+                    title: Text(strings.korean),
+                  ),
+                  RadioListTile<String>(
+                    value: 'en',
+                    groupValue: selectedCode,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      _setLocaleCode(value);
+                    },
+                    title: Text(strings.english),
+                  ),
+                  RadioListTile<String>(
+                    value: 'ja',
+                    groupValue: selectedCode,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      _setLocaleCode(value);
+                    },
+                    title: Text(strings.japanese),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _GlassWrapper extends StatelessWidget {
