@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -635,248 +636,361 @@ class _TimerHomePageState extends State<TimerHomePage>
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final scale = (constraints.maxHeight / 720).clamp(1.0, 1.1);
-            final gap = 20 * scale;
-            final topGap = 0.0;
-            final wheelHeight = 72 * scale * 1.3;
-            final itemExtent = 38 * scale * 1.3;
-            final fontSize = 22 * scale * 1.3;
-            final maxHourglass = constraints.maxHeight * 0.6;
-            final hourglassSize = (320 * scale * 1.3).clamp(
-              260.0,
-              maxHourglass,
+            final isTablet = constraints.maxWidth >= 600;
+            final widthScale =
+                constraints.maxWidth / (isTablet ? 720.0 : 390.0);
+            final heightScale = constraints.maxHeight / 780.0;
+            final scale = math.min(widthScale, heightScale).clamp(
+              0.72,
+              isTablet ? 1.25 : 1.05,
             );
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Align(
-                        alignment: Alignment.topCenter,
+            final gap = (18 * scale).clamp(10.0, 26.0);
+            final horizontalPadding = (constraints.maxWidth * 0.06).clamp(
+              14.0,
+              28.0,
+            );
+            final contentMaxWidth = isTablet ? 760.0 : 520.0;
+            final contentWidth = math.min(
+              contentMaxWidth,
+              constraints.maxWidth - (horizontalPadding * 2),
+            );
+            final buttonRowMaxWidth = math.min(420.0, contentWidth);
+            final miniButtonSize = (constraints.maxWidth * 0.065).clamp(
+              isTablet ? 40.0 : 36.0,
+              isTablet ? 48.0 : 42.0,
+            );
+            final miniIconSize = (miniButtonSize * 0.58).clamp(20.0, 26.0);
+            final miniButtonGap = (isTablet ? 8.0 : 7.0);
+            final buttonLift = constraints.maxHeight >= 760 ? gap * 0.35 : 0.0;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                0,
+                horizontalPadding,
+                20,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 8, bottom: 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _MiniIconButton(
+                            size: miniButtonSize,
+                            iconSize: miniIconSize,
+                            icon: (_showControls ?? true)
+                                ? Icons.arrow_drop_down_rounded
+                                : Icons.arrow_drop_up_rounded,
+                            onTap: () => setState(
+                              () => _showControls = !(_showControls ?? true),
+                            ),
+                          ),
+                          SizedBox(width: miniButtonGap),
+                          _MiniIconButton(
+                            size: miniButtonSize,
+                            iconSize: miniIconSize,
+                            icon: (_soundOn ?? true)
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_off_rounded,
+                            onTap: () {
+                              final next = !(_soundOn ?? true);
+                              setState(() => _soundOn = next);
+                              if (_status == TimerStatus.running) {
+                                if (next) {
+                                  _startSandLoopIfEnabled();
+                                } else {
+                                  _stopSandLoop();
+                                }
+                              }
+                            },
+                          ),
+                          SizedBox(width: miniButtonGap),
+                          _MiniIconButton(
+                            size: miniButtonSize,
+                            iconSize: miniIconSize,
+                            icon: Icons.settings_rounded,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SettingsScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: gap * 0.4),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: contentMaxWidth),
                         child: Column(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
-                              width: double.infinity,
-                              child: Align(
-                                alignment: Alignment.topRight,
-                                child: Container(
-                                  margin: const EdgeInsets.only(
-                                    top: 8,
-                                    bottom: 10,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _MiniIconButton(
-                                        icon: (_showControls ?? true)
-                                            ? Icons.arrow_drop_down_rounded
-                                            : Icons.arrow_drop_up_rounded,
-                                        onTap: () => setState(
-                                          () => _showControls =
-                                              !(_showControls ?? true),
+                            Expanded(
+                              flex: 3,
+                              child: Center(
+                                child: LayoutBuilder(
+                                  builder: (context, hourglassConstraints) {
+                                    final hourglassMaxByWidth =
+                                        contentWidth * (isTablet ? 0.82 : 0.72);
+                                    final hourglassMaxByHeight =
+                                        hourglassConstraints.maxHeight * 0.9;
+                                    final hourglassSize = math
+                                        .min(
+                                          hourglassMaxByWidth,
+                                          hourglassMaxByHeight,
+                                        )
+                                        .clamp(160.0, isTablet ? 520.0 : 360.0);
+                                    return _GlassWrapper(
+                                      enabled: false,
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: isLiquidGlass
+                                              ? Colors.white.withOpacity(0.06)
+                                              : null,
+                                        ),
+                                        child: SizedBox(
+                                          height: hourglassSize,
+                                          width: hourglassSize,
+                                          child: AspectRatio(
+                                            aspectRatio: 1.0,
+                                            child: AnimatedBuilder(
+                                              animation:
+                                                  _repaintController ??
+                                                  const AlwaysStoppedAnimation(
+                                                    0,
+                                                  ),
+                                              builder: (context, _) {
+                                                final selected =
+                                                    _selectedDuration();
+                                                final idleEmpty =
+                                                    _status ==
+                                                        TimerStatus.idle &&
+                                                    selected.inMilliseconds ==
+                                                        0;
+                                                final forceIdleFull = idleEmpty;
+                                                final displayDuration =
+                                                    _status == TimerStatus.idle
+                                                    ? (idleEmpty
+                                                          ? const Duration(
+                                                              seconds: 1,
+                                                            )
+                                                          : selected)
+                                                    : _activeDuration;
+                                                final displayRemaining =
+                                                    _status == TimerStatus.idle
+                                                    ? (idleEmpty
+                                                          ? const Duration(
+                                                              seconds: 1,
+                                                            )
+                                                          : selected)
+                                                    : _remaining;
+                                                final displayEndTime =
+                                                    _status ==
+                                                        TimerStatus.running
+                                                    ? _endTime
+                                                    : null;
+                                                return CustomPaint(
+                                                  painter: HourglassPainter(
+                                                    status: _status,
+                                                    activeDuration:
+                                                        displayDuration,
+                                                    remaining:
+                                                        displayRemaining,
+                                                    endTime: displayEndTime,
+                                                    forceIdleFull:
+                                                        forceIdleFull,
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                      const SizedBox(width: 6),
-                                      _MiniIconButton(
-                                        icon: (_soundOn ?? true)
-                                            ? Icons.volume_up_rounded
-                                            : Icons.volume_off_rounded,
-                                        onTap: () {
-                                          final next = !(_soundOn ?? true);
-                                          setState(() => _soundOn = next);
-                                          if (_status == TimerStatus.running) {
-                                            if (next) {
-                                              _startSandLoopIfEnabled();
-                                            } else {
-                                              _stopSandLoop();
-                                            }
-                                          }
-                                        },
-                                      ),
-                                      const SizedBox(width: 6),
-                                      _MiniIconButton(
-                                        icon: Icons.settings_rounded,
-                                        onTap: () {
-                                          Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  const SettingsScreen(),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
+                                    );
+                                  },
                                 ),
                               ),
                             ),
-                            SizedBox(height: gap * 0.6),
-                            Stack(
-                              children: [
-                                _GlassWrapper(
-                                  enabled: false,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: isLiquidGlass
-                                          ? Colors.white.withOpacity(0.06)
-                                          : null,
-                                    ),
-                                    child: SizedBox(
-                                      height: hourglassSize,
-                                      width: hourglassSize,
-                                      child: AspectRatio(
-                                        aspectRatio: 1.0,
-                                        child: AnimatedBuilder(
-                                          animation:
-                                              _repaintController ??
-                                              const AlwaysStoppedAnimation(0),
-                                          builder: (context, _) {
-                                            final selected =
-                                                _selectedDuration();
-                                            final idleEmpty =
-                                                _status == TimerStatus.idle &&
-                                                selected.inMilliseconds == 0;
-                                            final forceIdleFull = idleEmpty;
-                                            final displayDuration =
-                                                _status == TimerStatus.idle
-                                                ? (idleEmpty
-                                                      ? const Duration(
-                                                          seconds: 1,
-                                                        )
-                                                      : selected)
-                                                : _activeDuration;
-                                            final displayRemaining =
-                                                _status == TimerStatus.idle
-                                                ? (idleEmpty
-                                                      ? const Duration(
-                                                          seconds: 1,
-                                                        )
-                                                      : selected)
-                                                : _remaining;
-                                            final displayEndTime =
-                                                _status == TimerStatus.running
-                                                ? _endTime
-                                                : null;
-                                            return CustomPaint(
-                                              painter: HourglassPainter(
-                                                status: _status,
-                                                activeDuration: displayDuration,
-                                                remaining: displayRemaining,
-                                                endTime: displayEndTime,
-                                                forceIdleFull: forceIdleFull,
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: gap),
+                            if (_showControls ?? true) SizedBox(height: gap * 0.4),
                             if (_showControls ?? true)
-                              Opacity(
-                                opacity: _status == TimerStatus.idle ? 1 : 0.6,
-                                child: IgnorePointer(
-                                  ignoring: _status != TimerStatus.idle,
-                                  child: CustomPaint(
-                                    painter: _WheelBoxOutlinePainter(),
-                                    child: _GlassWrapper(
-                                      enabled: isLiquidGlass,
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              _buildWheel(
-                                                label: '',
-                                                controller: _hoursController,
-                                                onChanged: _setHours,
-                                                wheelHeight: wheelHeight,
-                                                itemExtent: itemExtent,
-                                                fontSize: fontSize,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              _buildWheel(
-                                                label: '',
-                                                controller: _minutesController,
-                                                onChanged: _setMinutes,
-                                                wheelHeight: wheelHeight,
-                                                itemExtent: itemExtent,
-                                                fontSize: fontSize,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              _buildWheel(
-                                                label: '',
-                                                controller: _secondsController,
-                                                onChanged: _setSeconds,
-                                                wheelHeight: wheelHeight,
-                                                itemExtent: itemExtent,
-                                                fontSize: fontSize,
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          if (_showBoundaryWarning)
-                                            const Padding(
-                                              padding: EdgeInsets.only(top: 6),
-                                              child: Text(
-                                                '24:00:00 초과 불가 — 23시간대로 조정됨',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  color: Colors.red,
-                                                  fontSize: 12,
+                              Expanded(
+                                flex: 2,
+                                child: LayoutBuilder(
+                                  builder: (context, controlConstraints) {
+                                    final wheelHeight = (controlConstraints
+                                                .maxHeight *
+                                            0.48)
+                                        .clamp(58.0, 120.0);
+                                    final itemExtent =
+                                        (wheelHeight * 0.44).clamp(28.0, 54.0);
+                                    final fontSize =
+                                        (wheelHeight * 0.26).clamp(16.0, 30.0);
+                                    return Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Opacity(
+                                          opacity:
+                                              _status == TimerStatus.idle
+                                              ? 1
+                                              : 0.6,
+                                          child: IgnorePointer(
+                                            ignoring:
+                                                _status != TimerStatus.idle,
+                                            child: CustomPaint(
+                                              painter:
+                                                  _WheelBoxOutlinePainter(),
+                                              child: _GlassWrapper(
+                                                enabled: isLiquidGlass,
+                                                child: Column(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        _buildWheel(
+                                                          label: '',
+                                                          controller:
+                                                              _hoursController,
+                                                          onChanged: _setHours,
+                                                          wheelHeight:
+                                                              wheelHeight,
+                                                          itemExtent:
+                                                              itemExtent,
+                                                          fontSize: fontSize,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        _buildWheel(
+                                                          label: '',
+                                                          controller:
+                                                              _minutesController,
+                                                          onChanged:
+                                                              _setMinutes,
+                                                          wheelHeight:
+                                                              wheelHeight,
+                                                          itemExtent:
+                                                              itemExtent,
+                                                          fontSize: fontSize,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        _buildWheel(
+                                                          label: '',
+                                                          controller:
+                                                              _secondsController,
+                                                          onChanged:
+                                                              _setSeconds,
+                                                          wheelHeight:
+                                                              wheelHeight,
+                                                          itemExtent:
+                                                              itemExtent,
+                                                          fontSize: fontSize,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    if (_showBoundaryWarning)
+                                                      const Padding(
+                                                        padding:
+                                                            EdgeInsets.only(
+                                                              top: 6,
+                                                            ),
+                                                        child: Text(
+                                                          '24:00:00 초과 불가 — 23시간대로 조정됨',
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          style: TextStyle(
+                                                            color: Colors.red,
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
                                                 ),
                                               ),
                                             ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                          ),
+                                        ),
+                                        SizedBox(height: gap * 0.15),
+                                        Transform.translate(
+                                          offset: Offset(0, -buttonLift),
+                                          child: ConstrainedBox(
+                                            constraints: BoxConstraints(
+                                              maxWidth: buttonRowMaxWidth,
+                                            ),
+                                            child: _status != TimerStatus.idle &&
+                                                    _status !=
+                                                        TimerStatus.running
+                                                ? Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: _GlassButton(
+                                                          enabled:
+                                                              isLiquidGlass,
+                                                          filled: true,
+                                                          onPressed: _isRunning
+                                                              ? _pause
+                                                              : (_canStart
+                                                                    ? _start
+                                                                    : null),
+                                                          child: Text(
+                                                            primaryLabel,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 12),
+                                                      Expanded(
+                                                        child: _GlassButton(
+                                                          enabled:
+                                                              isLiquidGlass,
+                                                          filled: false,
+                                                          onPressed: _reset,
+                                                          child: Text(
+                                                            labels.reset,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  )
+                                                : SizedBox(
+                                                    width: math.min(
+                                                      220.0,
+                                                      buttonRowMaxWidth,
+                                                    ),
+                                                    child: _GlassButton(
+                                                      enabled: isLiquidGlass,
+                                                      filled: true,
+                                                      onPressed: _isRunning
+                                                          ? _pause
+                                                          : (_canStart
+                                                                ? _start
+                                                                : null),
+                                                      child: Text(primaryLabel),
+                                                    ),
+                                                  ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
                                 ),
-                              ),
-                            SizedBox(height: gap),
-                            if (_showControls ?? true)
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: 140,
-                                    child: _GlassButton(
-                                      enabled: isLiquidGlass,
-                                      filled: true,
-                                      onPressed: _isRunning
-                                          ? _pause
-                                          : (_canStart ? _start : null),
-                                      child: Text(primaryLabel),
-                                    ),
-                                  ),
-                                  if (_status != TimerStatus.idle &&
-                                      _status != TimerStatus.running) ...[
-                                    const SizedBox(width: 12),
-                                    SizedBox(
-                                      width: 140,
-                                      child: _GlassButton(
-                                        enabled: isLiquidGlass,
-                                        filled: false,
-                                        onPressed: _reset,
-                                        child: Text(labels.reset),
-                                      ),
-                                    ),
-                                  ],
-                                ],
                               ),
                           ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
             );
           },
@@ -1222,10 +1336,17 @@ class _WheelBoxOutlinePainter extends CustomPainter {
 }
 
 class _MiniIconButton extends StatelessWidget {
+  final double size;
+  final double iconSize;
   final IconData icon;
   final VoidCallback onTap;
 
-  const _MiniIconButton({required this.icon, required this.onTap});
+  const _MiniIconButton({
+    required this.icon,
+    required this.onTap,
+    this.size = 28,
+    this.iconSize = 20,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1233,14 +1354,14 @@ class _MiniIconButton extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        width: 28,
-        height: 28,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.16),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(size * 0.28),
           border: Border.all(color: Colors.white.withOpacity(0.35)),
         ),
-        child: Icon(icon, size: 20, color: const Color(0xFF5B4634)),
+        child: Icon(icon, size: iconSize, color: const Color(0xFF5B4634)),
       ),
     );
   }
