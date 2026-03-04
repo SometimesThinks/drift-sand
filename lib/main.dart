@@ -477,7 +477,7 @@ class _TimerHomePageState extends State<TimerHomePage>
               style: WheelPickerStyle(
                 itemExtent: itemExtent,
                 diameterRatio: 1.2,
-                surroundingOpacity: 1.0,
+                surroundingOpacity: _status == TimerStatus.idle ? 1.0 : 0.0,
                 magnification: 1.0,
                 squeeze: 1.0,
               ),
