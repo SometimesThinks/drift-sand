@@ -5,6 +5,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:wheel_picker/wheel_picker.dart';
@@ -28,6 +29,16 @@ class DriftSandApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Drift Sand',
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en'),
+        Locale('ko'),
+        Locale('ja'),
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8FBFA6)),
         useMaterial3: true,
@@ -121,6 +132,31 @@ class _TimerHomePageState extends State<TimerHomePage>
   bool get _isRunning => _status == TimerStatus.running;
   bool get _isPaused => _status == TimerStatus.paused;
   bool get _isFinished => _status == TimerStatus.finished;
+
+  _ButtonLabels _labelsForLocale(Locale locale) {
+    if (locale.languageCode == 'ko') {
+      return const _ButtonLabels(
+        start: '시작',
+        pause: '정지',
+        resume: '재개',
+        reset: '초기화',
+      );
+    }
+    if (locale.languageCode == 'ja') {
+      return const _ButtonLabels(
+        start: '開始',
+        pause: '停止',
+        resume: '再開',
+        reset: 'リセット',
+      );
+    }
+    return const _ButtonLabels(
+      start: 'Start',
+      pause: 'Pause',
+      resume: 'Resume',
+      reset: 'Reset',
+    );
+  }
 
   bool get _canStart {
     if (_status == TimerStatus.idle) {
@@ -486,14 +522,13 @@ class _TimerHomePageState extends State<TimerHomePage>
 
   @override
   Widget build(BuildContext context) {
+    final labels = _labelsForLocale(Localizations.localeOf(context));
     final remainingLabel = _formatDuration(_remaining);
     final primaryLabel = _isRunning
-        ? 'pause'
+        ? labels.pause
         : _isPaused
-        ? 'resume'
-        : _isFinished
-        ? 'restart'
-        : 'start';
+        ? labels.resume
+        : labels.start;
     final primaryAction = _isRunning ? _pause : _start;
     const isLiquidGlass = true;
     // 전체 화면 레이아웃 구조
@@ -798,7 +833,7 @@ class _TimerHomePageState extends State<TimerHomePage>
                                         enabled: isLiquidGlass,
                                         filled: false,
                                         onPressed: _reset,
-                                        child: const Text('reset'),
+                                        child: Text(labels.reset),
                                       ),
                                     ),
                                   ],
@@ -817,6 +852,20 @@ class _TimerHomePageState extends State<TimerHomePage>
       ),
     );
   }
+}
+
+class _ButtonLabels {
+  final String start;
+  final String pause;
+  final String resume;
+  final String reset;
+
+  const _ButtonLabels({
+    required this.start,
+    required this.pause,
+    required this.resume,
+    required this.reset,
+  });
 }
 
 class _GlassWrapper extends StatelessWidget {
