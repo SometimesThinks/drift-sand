@@ -1194,9 +1194,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Localizations.localeOf(context),
     );
     return Scaffold(
-      appBar: AppBar(
-        title: Text(strings.title),
-        centerTitle: true,
+      appBar: _HeaderBottomEdge(
+        child: AppBar(
+          title: Text(strings.title),
+          centerTitle: true,
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -1498,7 +1500,7 @@ class _WheelBoxOutlinePainter extends CustomPainter {
   bool shouldRepaint(covariant _WheelBoxOutlinePainter oldDelegate) => false;
 }
 
-class _MiniIconButton extends StatelessWidget {
+class _MiniIconButton extends StatefulWidget {
   final double size;
   final double iconSize;
   final IconData icon;
@@ -1512,19 +1514,71 @@ class _MiniIconButton extends StatelessWidget {
   });
 
   @override
+  State<_MiniIconButton> createState() => _MiniIconButtonState();
+}
+
+class _MiniIconButtonState extends State<_MiniIconButton> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (!mounted) return;
+    setState(() => _pressed = value);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
+      onTapDown: (_) => _setPressed(true),
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.16),
-          borderRadius: BorderRadius.circular(size * 0.28),
-          border: Border.all(color: Colors.white.withOpacity(0.35)),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+        scale: _pressed ? 0.94 : 1.0,
+        child: Stack(
+          children: [
+            Container(
+              width: widget.size,
+              height: widget.size,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.16),
+                borderRadius: BorderRadius.circular(widget.size * 0.28),
+                border: Border.all(color: Colors.white.withOpacity(0.35)),
+              ),
+              child: Icon(
+                widget.icon,
+                size: widget.iconSize,
+                color: const Color(0xFF5B4634),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 140),
+                  opacity: _pressed ? 0.55 : 0.0,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(widget.size * 0.28),
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.black.withOpacity(0.12),
+                          const Color(0xFFF4D7AE).withOpacity(0.35),
+                          const Color(0xFFF0CFA3).withOpacity(0.20),
+                          Colors.black.withOpacity(0.10),
+                        ],
+                        stops: const [0.0, 0.35, 0.7, 1.0],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-        child: Icon(icon, size: iconSize, color: const Color(0xFF5B4634)),
       ),
     );
   }
