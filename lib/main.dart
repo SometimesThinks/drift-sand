@@ -13,8 +13,36 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:wheel_picker/wheel_picker.dart';
 
 const String _prefsLocaleKey = 'app_locale';
+const String _prefsAmbientVolumeKey = 'ambient_volume';
+const String _prefsBellVolumeKey = 'bell_volume';
+const double _defaultAmbientVolume = 0.75;
+const double _defaultBellVolume = 0.85;
 final ValueNotifier<String?> _localeCodeNotifier = ValueNotifier<String?>(null);
 final ValueNotifier<Locale?> _localeNotifier = ValueNotifier<Locale?>(null);
+final ValueNotifier<double> _ambientVolumeNotifier = ValueNotifier<double>(
+  _defaultAmbientVolume,
+);
+final ValueNotifier<double> _bellVolumeNotifier = ValueNotifier<double>(
+  _defaultBellVolume,
+);
+
+double _sanitizeVolume(double? value, double fallback) {
+  if (value == null || value.isNaN) return fallback;
+  return value.clamp(0.0, 1.0);
+}
+
+int _displayVolumePercent(double value) {
+  final raw = (value * 100).round();
+  final stepped = ((raw / 5).round()) * 5;
+  return stepped.clamp(0, 100);
+}
+
+int _displayBellVolumePercent(double value) {
+  if ((value - _defaultBellVolume).abs() < 0.001) {
+    return 80;
+  }
+  return _displayVolumePercent(value);
+}
 
 Future<void> _setLocaleCode(String code) async {
   _localeCodeNotifier.value = code;
@@ -23,12 +51,36 @@ Future<void> _setLocaleCode(String code) async {
   await prefs.setString(_prefsLocaleKey, code);
 }
 
+Future<void> _setAmbientVolume(double value) async {
+  final normalized = _sanitizeVolume(value, _defaultAmbientVolume);
+  _ambientVolumeNotifier.value = normalized;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setDouble(_prefsAmbientVolumeKey, normalized);
+}
+
+Future<void> _setBellVolume(double value) async {
+  final normalized = _sanitizeVolume(value, _defaultBellVolume);
+  _bellVolumeNotifier.value = normalized;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setDouble(_prefsBellVolumeKey, normalized);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
   final storedLocale = prefs.getString(_prefsLocaleKey);
+  final storedAmbientVolume = prefs.getDouble(_prefsAmbientVolumeKey);
+  final storedBellVolume = prefs.getDouble(_prefsBellVolumeKey);
   _localeCodeNotifier.value = storedLocale;
   _localeNotifier.value = storedLocale == null ? null : Locale(storedLocale);
+  _ambientVolumeNotifier.value = _sanitizeVolume(
+    storedAmbientVolume,
+    _defaultAmbientVolume,
+  );
+  _bellVolumeNotifier.value = _sanitizeVolume(
+    storedBellVolume,
+    _defaultBellVolume,
+  );
   if (!kIsWeb) {
     await MobileAds.instance.updateRequestConfiguration(
       RequestConfiguration(
@@ -138,6 +190,8 @@ class _TimerHomePageState extends State<TimerHomePage>
   bool? _soundOn = true;
   bool _hasNotifiedCompletion = false;
   bool _sandLooping = false;
+  double _ambientVolume = _defaultAmbientVolume;
+  double _bellVolume = _defaultBellVolume;
 
   final AudioPlayer _fxPlayer = AudioPlayer();
   final AudioPlayer _sandPlayer = AudioPlayer();
@@ -200,6 +254,10 @@ class _TimerHomePageState extends State<TimerHomePage>
     WidgetsBinding.instance.addObserver(this);
     _ensureRepaintController();
     _sandPlayer.setReleaseMode(ReleaseMode.loop);
+    _ambientVolume = _ambientVolumeNotifier.value;
+    _bellVolume = _bellVolumeNotifier.value;
+    _ambientVolumeNotifier.addListener(_handleAmbientVolumeChanged);
+    _bellVolumeNotifier.addListener(_handleBellVolumeChanged);
     _loadBannerAd();
     _hoursController = WheelPickerController(
       itemCount: _maxHours + 1,
@@ -354,7 +412,7 @@ class _TimerHomePageState extends State<TimerHomePage>
     if (!(_soundOn ?? true)) return;
     if (_sandLooping) return;
     _sandLooping = true;
-    await _sandPlayer.setVolume(1.0);
+    await _sandPlayer.setVolume(_ambientVolume);
     await _sandPlayer.play(AssetSource('audio/sand-onto-sand.ogg'));
   }
 
@@ -369,11 +427,22 @@ class _TimerHomePageState extends State<TimerHomePage>
     _hasNotifiedCompletion = true;
     final soundOn = _soundOn ?? true;
     if (soundOn) {
-      await _fxPlayer.setVolume(0.8);
+      await _fxPlayer.setVolume(_bellVolume);
       await _fxPlayer.play(AssetSource('audio/ding-notification.mp3'));
     } else {
       HapticFeedback.vibrate();
     }
+  }
+
+  void _handleAmbientVolumeChanged() {
+    _ambientVolume = _ambientVolumeNotifier.value;
+    if ((_soundOn ?? true) && _sandLooping) {
+      _sandPlayer.setVolume(_ambientVolume);
+    }
+  }
+
+  void _handleBellVolumeChanged() {
+    _bellVolume = _bellVolumeNotifier.value;
   }
 
   Duration _selectedDuration() {
@@ -535,6 +604,8 @@ class _TimerHomePageState extends State<TimerHomePage>
     _ticker?.cancel();
     _boundaryTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    _ambientVolumeNotifier.removeListener(_handleAmbientVolumeChanged);
+    _bellVolumeNotifier.removeListener(_handleBellVolumeChanged);
     _repaintController?.dispose();
     _fxPlayer.dispose();
     _sandPlayer.dispose();
@@ -1030,6 +1101,8 @@ _SettingsStrings _settingsStringsForLocale(Locale locale) {
     return const _SettingsStrings(
       title: '설정',
       language: '언어',
+      ambientVolume: '배경음 크기',
+      bellVolume: '종료음 크기',
       korean: '한국어',
       english: '영어',
       japanese: '일본어',
@@ -1039,6 +1112,8 @@ _SettingsStrings _settingsStringsForLocale(Locale locale) {
     return const _SettingsStrings(
       title: '設定',
       language: '言語',
+      ambientVolume: '環境音の音量',
+      bellVolume: '終了音量',
       korean: '韓国語',
       english: '英語',
       japanese: '日本語',
@@ -1047,6 +1122,8 @@ _SettingsStrings _settingsStringsForLocale(Locale locale) {
   return const _SettingsStrings(
     title: 'Settings',
     language: 'Language',
+    ambientVolume: 'Background Sound Volume',
+    bellVolume: 'End Sound Volume',
     korean: 'Korean',
     english: 'English',
     japanese: 'Japanese',
@@ -1056,6 +1133,8 @@ _SettingsStrings _settingsStringsForLocale(Locale locale) {
 class _SettingsStrings {
   final String title;
   final String language;
+  final String ambientVolume;
+  final String bellVolume;
   final String korean;
   final String english;
   final String japanese;
@@ -1063,14 +1142,51 @@ class _SettingsStrings {
   const _SettingsStrings({
     required this.title,
     required this.language,
+    required this.ambientVolume,
+    required this.bellVolume,
     required this.korean,
     required this.english,
     required this.japanese,
   });
 }
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final AudioPlayer _ambientPreviewPlayer = AudioPlayer();
+  final AudioPlayer _bellPreviewPlayer = AudioPlayer();
+  Timer? _ambientPreviewTimer;
+
+  Future<void> _playAmbientPreview(double volume) async {
+    _ambientPreviewTimer?.cancel();
+    await _ambientPreviewPlayer.stop();
+    await _ambientPreviewPlayer.setReleaseMode(ReleaseMode.loop);
+    await _ambientPreviewPlayer.setVolume(volume);
+    await _ambientPreviewPlayer.play(AssetSource('audio/sand-onto-sand.ogg'));
+    _ambientPreviewTimer = Timer(const Duration(seconds: 3), () {
+      _ambientPreviewPlayer.stop();
+    });
+  }
+
+  Future<void> _playBellPreview(double volume) async {
+    await _bellPreviewPlayer.stop();
+    await _bellPreviewPlayer.setReleaseMode(ReleaseMode.release);
+    await _bellPreviewPlayer.setVolume(volume);
+    await _bellPreviewPlayer.play(AssetSource('audio/ding-notification.mp3'));
+  }
+
+  @override
+  void dispose() {
+    _ambientPreviewTimer?.cancel();
+    _ambientPreviewPlayer.dispose();
+    _bellPreviewPlayer.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1097,36 +1213,83 @@ class SettingsScreen extends StatelessWidget {
                 Localizations.localeOf(context).languageCode,
               );
               final selectedCode = code ?? systemCode;
-              return Column(
+              Widget languageOption(String value, String label) {
+                return Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => _setLocaleCode(value),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Radio<String>(
+                            value: value,
+                            groupValue: selectedCode,
+                            onChanged: (next) {
+                              if (next == null) return;
+                              _setLocaleCode(next);
+                            },
+                          ),
+                          Text(label, textAlign: TextAlign.center),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  RadioListTile<String>(
-                    value: 'ko',
-                    groupValue: selectedCode,
-                    onChanged: (value) {
-                      if (value == null) return;
-                      _setLocaleCode(value);
-                    },
-                    title: Text(strings.korean),
-                  ),
-                  RadioListTile<String>(
-                    value: 'en',
-                    groupValue: selectedCode,
-                    onChanged: (value) {
-                      if (value == null) return;
-                      _setLocaleCode(value);
-                    },
-                    title: Text(strings.english),
-                  ),
-                  RadioListTile<String>(
-                    value: 'ja',
-                    groupValue: selectedCode,
-                    onChanged: (value) {
-                      if (value == null) return;
-                      _setLocaleCode(value);
-                    },
-                    title: Text(strings.japanese),
-                  ),
+                  languageOption('ko', strings.korean),
+                  languageOption('en', strings.english),
+                  languageOption('ja', strings.japanese),
                 ],
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          Text(
+            strings.ambientVolume,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          ValueListenableBuilder<double>(
+            valueListenable: _ambientVolumeNotifier,
+            builder: (context, volume, _) {
+              final displayPercent = _displayVolumePercent(volume);
+              return Slider(
+                value: volume,
+                min: 0,
+                max: 1,
+                divisions: 20,
+                label: '$displayPercent%',
+                onChanged: (value) {
+                  _setAmbientVolume(value);
+                  _playAmbientPreview(value);
+                },
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          Text(
+            strings.bellVolume,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          ValueListenableBuilder<double>(
+            valueListenable: _bellVolumeNotifier,
+            builder: (context, volume, _) {
+              final displayPercent = _displayBellVolumePercent(volume);
+              return Slider(
+                value: volume,
+                min: 0,
+                max: 1,
+                divisions: 20,
+                label: '$displayPercent%',
+                onChanged: (value) {
+                  _setBellVolume(value);
+                  _playBellPreview(value);
+                },
               );
             },
           ),
