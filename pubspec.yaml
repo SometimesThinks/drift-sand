@@ -52,6 +52,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.6
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -91,7 +93,28 @@ flutter:
   assets:
     - assets/audio/ding-notification.mp3
     - assets/audio/sand-onto-sand.ogg
-    - assets/image/logo.png
+    - assets/image/icon_foreground.png
+    - assets/image/icon_background.png
+    - assets/image/splash_logo.png
+    - assets/image/app_icon_full.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/image/app_icon_full.png
+  adaptive_icon_foreground: assets/image/icon_foreground.png
+  adaptive_icon_background: assets/image/icon_background.png
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#F6ECD9"
+  image: assets/image/splash_logo.png
+  android: true
+  ios: true
+  web: false
+  android_12:
+    color: "#F6ECD9"
+    image: assets/image/splash_logo.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
