@@ -17,6 +17,10 @@ const String _prefsAmbientVolumeKey = 'ambient_volume';
 const String _prefsBellVolumeKey = 'bell_volume';
 const double _defaultAmbientVolume = 0.75;
 const double _defaultBellVolume = 0.85;
+const bool _storeShotMode = bool.fromEnvironment(
+  'STORE_SHOT',
+  defaultValue: false,
+);
 final ValueNotifier<String?> _localeCodeNotifier = ValueNotifier<String?>(null);
 final ValueNotifier<Locale?> _localeNotifier = ValueNotifier<Locale?>(null);
 final ValueNotifier<double> _ambientVolumeNotifier = ValueNotifier<double>(
@@ -258,7 +262,9 @@ class _TimerHomePageState extends State<TimerHomePage>
     _bellVolume = _bellVolumeNotifier.value;
     _ambientVolumeNotifier.addListener(_handleAmbientVolumeChanged);
     _bellVolumeNotifier.addListener(_handleBellVolumeChanged);
-    _loadBannerAd();
+    if (!_storeShotMode) {
+      _loadBannerAd();
+    }
     _hoursController = WheelPickerController(
       itemCount: _maxHours + 1,
       initialIndex: _selectedHours,
@@ -655,46 +661,50 @@ class _TimerHomePageState extends State<TimerHomePage>
         ),
       ),
       extendBodyBehindAppBar: false,
-      bottomNavigationBar: SafeArea(
-        child: SizedBox(
-          height: _bannerAd?.size.height.toDouble() ?? 50,
-          child: Center(
-            child: _isBannerReady && _bannerAd != null
-                ? SizedBox(
-                    width: _bannerAd!.size.width.toDouble(),
-                    height: _bannerAd!.size.height.toDouble(),
-                    child: AdWidget(ad: _bannerAd!),
-                  )
-                : _GlassWrapper(
-                    enabled: isLiquidGlass,
-                    child: Container(
-                      height: _bannerAd?.size.height.toDouble() ?? 50,
-                      alignment: Alignment.center,
-                      margin: const EdgeInsets.symmetric(horizontal: 24),
-                      decoration: BoxDecoration(
-                        color: isLiquidGlass
-                            ? Colors.white.withOpacity(0.12)
-                            : Colors.brown.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isLiquidGlass
-                              ? Colors.white.withOpacity(0.35)
-                              : Colors.brown.shade200,
+      bottomNavigationBar: _storeShotMode
+          ? null
+          : SafeArea(
+              child: SizedBox(
+                height: _bannerAd?.size.height.toDouble() ?? 50,
+                child: Center(
+                  child: _isBannerReady && _bannerAd != null
+                      ? SizedBox(
+                          width: _bannerAd!.size.width.toDouble(),
+                          height: _bannerAd!.size.height.toDouble(),
+                          child: AdWidget(ad: _bannerAd!),
+                        )
+                      : _GlassWrapper(
+                          enabled: isLiquidGlass,
+                          child: Container(
+                            height: _bannerAd?.size.height.toDouble() ?? 50,
+                            alignment: Alignment.center,
+                            margin: const EdgeInsets.symmetric(horizontal: 24),
+                            decoration: BoxDecoration(
+                              color: isLiquidGlass
+                                  ? Colors.white.withOpacity(0.12)
+                                  : Colors.brown.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isLiquidGlass
+                                    ? Colors.white.withOpacity(0.35)
+                                    : Colors.brown.shade200,
+                              ),
+                            ),
+                            child: Text(
+                              'Ad Banner Placeholder',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isLiquidGlass
+                                    ? Colors.black87
+                                    : Colors.brown,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        'Ad Banner Placeholder',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isLiquidGlass ? Colors.black87 : Colors.brown,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ),
-                  ),
-          ),
-        ),
-      ),
+                ),
+              ),
+            ),
       body: Container(
         decoration: BoxDecoration(
           gradient: isLiquidGlass
